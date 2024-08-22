@@ -10,7 +10,7 @@ class ChecklistApp:
     def __init__(self, root):
         self.root = root
         self.root.title("My Checklist")
-        self.root.geometry("600x500")  # Increased width to accommodate new layout
+        self.root.geometry("400x500")  # Increase width to accommodate new layout
 
         self.tasks = []
         self.deleted_tasks = []
@@ -33,13 +33,12 @@ class ChecklistApp:
         self.task_frame = tk.Frame(root)
         self.task_frame.pack(pady=10, fill=tk.BOTH, expand=True)
 
-        # Add headers above the listboxes
         self.header_frame = tk.Frame(self.task_frame)
         self.header_frame.pack(fill=tk.X)
 
-        self.task_header = tk.Label(self.header_frame, text="Task", font=("Helvetica", 10, "bold"))
+        self.task_header = tk.Label(self.header_frame, text="Task", font=("Helvetica", 13, "bold"))
         self.task_header.pack(side=tk.LEFT, padx=5)
-        self.remark_header = tk.Label(self.header_frame, text="Remark", font=("Helvetica", 10, "bold"))
+        self.remark_header = tk.Label(self.header_frame, text="Remark", font=("Helvetica", 13, "bold"))
         self.remark_header.pack(side=tk.RIGHT, padx=5)
 
         self.task_listbox = tk.Listbox(self.task_frame, selectmode=tk.MULTIPLE)
@@ -48,7 +47,6 @@ class ChecklistApp:
         self.remark_listbox = tk.Listbox(self.task_frame, width=20)  # Adjust the width here
         self.remark_listbox.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
-        # Allow manual adjustment of listbox widths
         self.task_listbox.config(width=50)
         self.remark_listbox.config(width=50)
 
@@ -60,7 +58,7 @@ class ChecklistApp:
         self.complete_button = tk.Button(root, text="Complete Selected", command=self.complete_tasks)
         self.complete_button.pack(pady=5)
 
-        self.recall_button = tk.Button(root, text="Recall Deleted/Completed", command=self.recall_task)
+        self.recall_button = tk.Button(root, text="Recall", command=self.recall_task)
         self.recall_button.pack(pady=5)
 
         self.reminder_label = tk.Label(root, text="")
@@ -77,20 +75,26 @@ class ChecklistApp:
         task = self.task_var.get()
         if task:
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            self.tasks.append((task, timestamp, "", ""))  # Added empty remark and completion timestamp
+            self.tasks.append((task, timestamp, "", ""))  
             self.task_listbox.insert(tk.END, task)
-            self.remark_listbox.insert(tk.END, "Remark")  # Add empty remark
+            self.remark_listbox.insert(tk.END, "Remark")
             self.task_var.set("")
             self.root.after(3600000, self.remind_task, task)  # Set a 1-hour timer for the task
+
+    def remind_task(self, task):
+        messagebox.showinfo("Reminder", f"Have this task completed? {task}")
+        self.root.after(3600000, self.remind_task, task)  # Set another timer for the next reminder
+
+        self.root.after(3600000,self.remind_task, task)
 
     def complete_tasks(self):
         selected_tasks = self.task_listbox.curselection()
         for index in selected_tasks[::-1]:
-            task = self.task_listbox.get(index)  # Get the task before deleting
+            task = self.task_listbox.get(index)  
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             self.deleted_tasks.append((task, self.tasks[index][1], timestamp, self.tasks[index][3]))  # Include start and completion timestamps and remark
             self.task_listbox.delete(index)
-            self.remark_listbox.delete(index)  # Remove remark
+            self.remark_listbox.delete(index)
             self.tasks.pop(index)
 
     def recall_task(self):
