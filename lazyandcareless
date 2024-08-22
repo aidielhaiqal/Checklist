@@ -1,0 +1,165 @@
+import tkinter as tk
+from tkinter import messagebox, simpledialog, filedialog
+from tkinter import ttk
+import pandas as pd
+from datetime import datetime
+import tempfile
+import os
+
+class ChecklistApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("My Checklist")
+        self.root.geometry("600x500")  # Increased width to accommodate new layout
+
+        self.tasks = []
+        self.deleted_tasks = []
+        self.completed_tasks = []
+        self.task_var = tk.StringVar()
+
+        self.top_frame = tk.Frame(root)
+        self.top_frame.pack(pady=10, fill=tk.X)
+
+        self.task_entry = tk.Entry(self.top_frame, textvariable=self.task_var)
+        self.task_entry.pack(side=tk.LEFT, padx=5)
+        self.task_entry.bind("<Return>", lambda event: self.add_task())
+
+        self.add_button = tk.Button(self.top_frame, text="Add Task", command=self.add_task)
+        self.add_button.pack(side=tk.LEFT, padx=5)
+
+        self.history_button = tk.Button(self.top_frame, text="Export History", command=self.export_history)
+        self.history_button.pack(side=tk.RIGHT, padx=5)  # Positioned to the right
+
+        self.task_frame = tk.Frame(root)
+        self.task_frame.pack(pady=10, fill=tk.BOTH, expand=True)
+
+        # Add headers above the listboxes
+        self.header_frame = tk.Frame(self.task_frame)
+        self.header_frame.pack(fill=tk.X)
+
+        self.task_header = tk.Label(self.header_frame, text="Task", font=("Helvetica", 10, "bold"))
+        self.task_header.pack(side=tk.LEFT, padx=5)
+        self.remark_header = tk.Label(self.header_frame, text="Remark", font=("Helvetica", 10, "bold"))
+        self.remark_header.pack(side=tk.RIGHT, padx=5)
+
+        self.task_listbox = tk.Listbox(self.task_frame, selectmode=tk.MULTIPLE)
+        self.task_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        self.remark_listbox = tk.Listbox(self.task_frame, width=20)  # Adjust the width here
+        self.remark_listbox.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+
+        # Allow manual adjustment of listbox widths
+        self.task_listbox.config(width=50)
+        self.remark_listbox.config(width=50)
+
+        self.scrollbar = tk.Scrollbar(self.task_frame)
+        self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.task_listbox.config(yscrollcommand=self.scrollbar.set)
+        self.scrollbar.config(command=self.task_listbox.yview)
+
+        self.complete_button = tk.Button(root, text="Complete Selected", command=self.complete_tasks)
+        self.complete_button.pack(pady=5)
+
+        self.recall_button = tk.Button(root, text="Recall Deleted/Completed", command=self.recall_task)
+        self.recall_button.pack(pady=5)
+
+        self.reminder_label = tk.Label(root, text="")
+        self.reminder_label.pack(pady=5)
+
+        self.style = ttk.Style()
+        self.style.configure("TButton", font=("Helvetica", 10), background="#4CAF50", foreground="white")
+
+        # Bind right-click to show context menu for editing task or remark
+        self.task_listbox.bind("<Button-3>", self.show_context_menu)
+        self.remark_listbox.bind("<Button-3>", self.show_context_menu)
+
+    def add_task(self):
+        task = self.task_var.get()
+        if task:
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            self.tasks.append((task, timestamp, "", ""))  # Added empty remark and completion timestamp
+            self.task_listbox.insert(tk.END, task)
+            self.remark_listbox.insert(tk.END, "Remark")  # Add empty remark
+            self.task_var.set("")
+            self.root.after(3600000, self.remind_task, task)  # Set a 1-hour timer for the task
+
+    def complete_tasks(self):
+        selected_tasks = self.task_listbox.curselection()
+        for index in selected_tasks[::-1]:
+            task = self.task_listbox.get(index)  # Get the task before deleting
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            self.deleted_tasks.append((task, self.tasks[index][1], timestamp, self.tasks[index][3]))  # Include start and completion timestamps and remark
+            self.task_listbox.delete(index)
+            self.remark_listbox.delete(index)  # Remove remark
+            self.tasks.pop(index)
+
+    def recall_task(self):
+        if self.deleted_tasks or self.completed_tasks:
+            recall_choice = messagebox.askquestion("Recall", "Recall all deleted tasks?", icon='question')
+            if recall_choice == 'yes':
+                for task, start_timestamp, complete_timestamp, remark in self.deleted_tasks + self.completed_tasks:
+                    self.tasks.append((task, start_timestamp, complete_timestamp, remark))
+                    self.task_listbox.insert(tk.END, task)
+                    self.remark_listbox.insert(tk.END, remark)  # Add remark back
+                self.deleted_tasks.clear()
+                self.completed_tasks.clear()
+            else:
+                if self.deleted_tasks:
+                    last_task, start_timestamp, complete_timestamp, remark = self.deleted_tasks.pop()
+                else:
+                    last_task, start_timestamp, complete_timestamp, remark = self.completed_tasks.pop()
+                self.tasks.append((last_task, start_timestamp, complete_timestamp, remark))
+                self.task_listbox.insert(tk.END, last_task)
+                self.remark_listbox.insert(tk.END, remark)  # Add remark back
+
+    def export_history(self):
+        history = self.deleted_tasks + self.completed_tasks
+        df = pd.DataFrame(history, columns=["Task", "Start Timestamp", "Completion Timestamp", "Remark"])
+        
+        # Create a temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
+            df.to_excel(tmp.name, index=False)
+            tmp_path = tmp.name
+        
+        # Open the temporary file
+        os.system(f'start excel "{tmp_path}"')
+        
+        # Ask the user if they want to save the file
+        save_choice = messagebox.askquestion("Save", "Do you want to save the file?", icon='question')
+        if save_choice == 'yes':
+            file_path = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")])
+            if file_path:
+                df.to_excel(file_path, index=False)
+                messagebox.showinfo("Export", f"History saved to {file_path}")
+
+    def remind_task(self, task):
+        messagebox.showinfo("Reminder", f"Have this task completed? {task}")
+
+    def show_context_menu(self, event):
+        context_menu = tk.Menu(self.root, tearoff=0)
+        context_menu.add_command(label="Edit Task", command=lambda: self.edit_task(event))
+        context_menu.add_command(label="Edit Remark", command=lambda: self.edit_remark(event))
+        context_menu.post(event.x_root, event.y_root)
+
+    def edit_task(self, event):
+        selected_task_index = self.task_listbox.nearest(event.y)
+        selected_task = self.task_listbox.get(selected_task_index)
+        new_task = simpledialog.askstring("Edit Task", f"Edit task:", initialvalue=selected_task)
+        if new_task is not None:
+            self.tasks[selected_task_index] = (new_task, self.tasks[selected_task_index][1], self.tasks[selected_task_index][2], self.tasks[selected_task_index][3])
+            self.task_listbox.delete(selected_task_index)
+            self.task_listbox.insert(selected_task_index, new_task)
+
+    def edit_remark(self, event):
+        selected_task_index = self.remark_listbox.nearest(event.y)
+        selected_remark = self.remark_listbox.get(selected_task_index)
+        new_remark = simpledialog.askstring("Edit Remark", f"Edit remark:", initialvalue=selected_remark)
+        if new_remark is not None:
+            self.tasks[selected_task_index] = (self.tasks[selected_task_index][0], self.tasks[selected_task_index][1], self.tasks[selected_task_index][2], new_remark)
+            self.remark_listbox.delete(selected_task_index)
+            self.remark_listbox.insert(selected_task_index, new_remark)  # Update remark in listbox
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = ChecklistApp(root)
+    root.mainloop()
