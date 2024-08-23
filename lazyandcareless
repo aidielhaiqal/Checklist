@@ -5,6 +5,7 @@ import pandas as pd
 from datetime import datetime
 import tempfile
 import os
+import pytz
 
 class ChecklistApp:
     def __init__(self, root):
@@ -15,7 +16,10 @@ class ChecklistApp:
         self.tasks = []
         self.deleted_tasks = []
         self.completed_tasks = []
+        self.active_reminders = {}
         self.task_var = tk.StringVar()
+        self.task_listbox = tk.Listbox(root)
+        self.remark_listbox = tk.Listbox(root)
 
         self.top_frame = tk.Frame(root)
         self.top_frame.pack(pady=10, fill=tk.X)
@@ -74,70 +78,78 @@ class ChecklistApp:
     def add_task(self):
         task = self.task_var.get()
         if task:
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            tz = pytz.timezone('Asia/Kuala_Lumpur')
+            timestamp = datetime.now(tz).strftime("%Y-%m-%d %H:%M")
             self.tasks.append((task, timestamp, "", ""))  
             self.task_listbox.insert(tk.END, task)
             self.remark_listbox.insert(tk.END, "Remark")
             self.task_var.set("")
-            self.root.after(3600000, self.remind_task, task)  # Set a 1-hour timer for the task
+            reminder_id = self.root.after(3600000, self.remind_task, task)  # Set a 1-hour timer for the task
+            self.active_reminders[task] = reminder_id
 
     def remind_task(self, task):
-        messagebox.showinfo("Reminder", f"Have this task completed? {task}")
-        self.root.after(3600000, self.remind_task, task)  # Set another timer for the next reminder
-
-        self.root.after(3600000,self.remind_task, task)
+        if task in [t[0] for t in self.tasks]:
+            messagebox.showinfo("Reminder", f"Have this task completed? {task}")
+            reminder_id = self.root.after(3600000, self.remind_task, task)  # Set another timer for the next reminder
+            self.active_reminders[task] = reminder_id  
 
     def complete_tasks(self):
         selected_tasks = self.task_listbox.curselection()
         for index in selected_tasks[::-1]:
-            task = self.task_listbox.get(index)  
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            task = self.task_listbox.get(index) 
+            tz = pytz.timezone('Asia/Kuala_Lumpur') 
+            timestamp = datetime.now(tz).strftime("%Y-%m-%d %H:%M")
             self.deleted_tasks.append((task, self.tasks[index][1], timestamp, self.tasks[index][3]))  # Include start and completion timestamps and remark
             self.task_listbox.delete(index)
             self.remark_listbox.delete(index)
             self.tasks.pop(index)
+            if task in self.active_reminders:
+                self.root.after_cancel(self.active_reminders[task])
+                del self.active_reminders[task]
 
     def recall_task(self):
         if self.deleted_tasks or self.completed_tasks:
-            recall_choice = messagebox.askquestion("Recall", "Recall all deleted tasks?", icon='question')
-            if recall_choice == 'yes':
-                for task, start_timestamp, complete_timestamp, remark in self.deleted_tasks + self.completed_tasks:
-                    self.tasks.append((task, start_timestamp, complete_timestamp, remark))
-                    self.task_listbox.insert(tk.END, task)
-                    self.remark_listbox.insert(tk.END, remark)  # Add remark back
-                self.deleted_tasks.clear()
-                self.completed_tasks.clear()
-            else:
-                if self.deleted_tasks:
-                    last_task, start_timestamp, complete_timestamp, remark = self.deleted_tasks.pop()
-                else:
-                    last_task, start_timestamp, complete_timestamp, remark = self.completed_tasks.pop()
-                self.tasks.append((last_task, start_timestamp, complete_timestamp, remark))
-                self.task_listbox.insert(tk.END, last_task)
-                self.remark_listbox.insert(tk.END, remark)  # Add remark back
+            tasks_to_recall = self.deleted_tasks + self.completed_tasks
+            task_list = [task[0] for task in tasks_to_recall]
+        
+            selected_task = simpledialog.askstring("Recall Task", f"Select a task to recall:\n{', '.join(task_list)}")
+        
+            if selected_task:
+                for task, start_timestamp, complete_timestamp, remark in tasks_to_recall:
+                    if task == selected_task:
+                        self.tasks.append((task, start_timestamp, complete_timestamp, remark))
+                        self.task_listbox.insert(tk.END, task)
+                        self.remark_listbox.insert(tk.END, remark)  # Add remark back
+                        if (task, start_timestamp, complete_timestamp, remark) in self.deleted_tasks:
+                            self.deleted_tasks.remove((task, start_timestamp, complete_timestamp, remark))
+                        else:
+                            self.completed_tasks.remove((task, start_timestamp, complete_timestamp, remark))
+                        break
+
 
     def export_history(self):
         history = self.deleted_tasks + self.completed_tasks
-        df = pd.DataFrame(history, columns=["Task", "Start Timestamp", "Completion Timestamp", "Remark"])
-        
-        # Create a temporary file
+        data = []
+
+        for task, start_timestamp, complete_timestamp, remark in history:
+            start_date, start_time = start_timestamp.split(' ')
+            complete_date, complete_time = complete_timestamp.split(' ') if complete_timestamp else ("", "")
+            data.append([task, start_date, start_time, complete_date, complete_time, remark])
+
+        df = pd.DataFrame(data, columns=["Task", "Start Date", "Start Time", "Completion Date", "Completion Time", "Remark"])
+
         with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
             df.to_excel(tmp.name, index=False)
             tmp_path = tmp.name
-        
-        # Open the temporary file
+
         os.system(f'start excel "{tmp_path}"')
-        
-        # Ask the user if they want to save the file
+
         save_choice = messagebox.askquestion("Save", "Do you want to save the file?", icon='question')
         if save_choice == 'yes':
             file_path = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")])
             if file_path:
                 df.to_excel(file_path, index=False)
                 messagebox.showinfo("Export", f"History saved to {file_path}")
-
-    def remind_task(self, task):
-        messagebox.showinfo("Reminder", f"Have this task completed? {task}")
 
     def show_context_menu(self, event):
         context_menu = tk.Menu(self.root, tearoff=0)
