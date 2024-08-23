@@ -109,22 +109,23 @@ class ChecklistApp:
 
     def recall_task(self):
         if self.deleted_tasks or self.completed_tasks:
+            # Combine deleted and completed tasks
             tasks_to_recall = self.deleted_tasks + self.completed_tasks
-            task_list = [task[0] for task in tasks_to_recall]
         
-            selected_task = simpledialog.askstring("Recall Task", f"Select a task to recall:\n{', '.join(task_list)}")
+            # Get the most recent task
+            most_recent_task = tasks_to_recall[-1]
         
-            if selected_task:
-                for task, start_timestamp, complete_timestamp, remark in tasks_to_recall:
-                    if task == selected_task:
-                        self.tasks.append((task, start_timestamp, complete_timestamp, remark))
-                        self.task_listbox.insert(tk.END, task)
-                        self.remark_listbox.insert(tk.END, remark)  # Add remark back
-                        if (task, start_timestamp, complete_timestamp, remark) in self.deleted_tasks:
-                            self.deleted_tasks.remove((task, start_timestamp, complete_timestamp, remark))
-                        else:
-                            self.completed_tasks.remove((task, start_timestamp, complete_timestamp, remark))
-                        break
+            # Add the most recent task back to the task list
+            task, start_timestamp, complete_timestamp, remark = most_recent_task
+            self.tasks.append((task, start_timestamp, complete_timestamp, remark))
+            self.task_listbox.insert(tk.END, task)
+            self.remark_listbox.insert(tk.END, remark)  # Add remark back
+        
+            # Remove the task from deleted or completed lists
+            if most_recent_task in self.deleted_tasks:
+                self.deleted_tasks.remove(most_recent_task)
+            else:
+                self.completed_tasks.remove(most_recent_task)
 
 
     def export_history(self):
