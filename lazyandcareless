@@ -1,11 +1,8 @@
 import tkinter as tk
 from tkinter import messagebox, simpledialog, filedialog
 from tkinter import ttk
-import pandas as pd
 from datetime import datetime
-import tempfile
 import os
-import pytz
 
 class ChecklistApp:
     def __init__(self, root):
@@ -129,6 +126,10 @@ class ChecklistApp:
 
 
     def export_history(self):
+        import pandas as pd
+        import tempfile
+        import pytz
+
         history = self.deleted_tasks + self.completed_tasks
         data = []
 
